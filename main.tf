@@ -4,30 +4,41 @@ provider "aws" {
 
 //vpc
 module "aws_vpc" {
-  source = "github.com/rogmanster/terraform-aws-vault-ent-starter/examples/aws-vpc"
+  source = "github.com/rogmanster/terraform-aws-vault-ent-starter-dynamodb/examples/aws-vpc"
 
   resource_name_prefix    = var.resource_name_prefix
 }
 
 //tls
 module "aws_acm" {
-  source = "github.com/rogmanster/terraform-aws-vault-ent-starter/examples/aws-secrets-manager-acm"
+  source = "github.com/rogmanster/terraform-aws-vault-ent-starter-dynamodb/examples/aws-secrets-manager-acm"
 
   resource_name_prefix    = var.resource_name_prefix
   aws_lb_dns_name         = var.aws_lb_dns_name
 
 }
 
+//dynamodb
+module "dynamodb" {
+  source = "github.com/rogmanster/terraform-aws-vault-ent-starter-dynamodb/modules/dynamodb"
+
+  resource_name_prefix    = var.resource_name_prefix
+  read_capacity           = 40000 #~our TF documentation shows 10 - which way too low
+  write_capacity          = 40000
+}
+
 //vault
 module "aws_vault_ent" {
-  source = "github.com/rogmanster/terraform-aws-vault-ent-starter"
+  source = "github.com/rogmanster/terraform-aws-vault-ent-starter-dynamodb"
 
   resource_name_prefix    = var.resource_name_prefix
   vault_license_filepath  = "/Users/rogman/workspaces/working/terraform-aws-vault-ent-starter/license.hclic"
   instance_type           = "m5.2xlarge"
-  node_count              = "5"
+  node_count              = "3"
   vault_version           = "1.9.4" #~1.10.0 not working apt-get install -y vault-enterprise=${vault_version}+ent
-  lb_health_check_path    = "/v1/sys/health?standbyok=true&perfstandbyok=true"
+  #lb_health_check_path    = "/v1/sys/health?standbyok=true&perfstandbyok=true"
+  #lb_health_check_path    = "/v1/sys/health?standbyok=true" #~benchmark did not work - all nodes healthy and assumed read/write would be forwarded from stby to act?
+  lb_health_check_path     = "/v1/sys/health?activecode=200" #~worked but not sure if correct - only active not is healthly
   allowed_inbound_cidrs_lb  = ["0.0.0.0/0"]
   block_device_mappings = [
     {
@@ -36,13 +47,13 @@ module "aws_vault_ent" {
       virtual_name = "root"
       ebs = {
         encrypted             = false
-        volume_size           = 1000
+        volume_size           = 200
         delete_on_termination = true
-        iops                  = 10000
+        iops                  = 3000
         kms_key_id            = null
         snapshot_id           = null
-        volume_type           = "io2"
-        throughput            = null #~valid for gp2/gp3
+        volume_type           = "gp3"
+        throughput            = 150 #~valid for gp2/gp3
       }
      }
   ]
@@ -52,13 +63,16 @@ module "aws_vault_ent" {
   secrets_manager_arn     = module.aws_acm.secrets_manager_arn
   lb_certificate_arn      = module.aws_acm.lb_certificate_arn
   leader_tls_servername   = module.aws_acm.leader_tls_servername
+  dynamodb_arn            = module.dynamodb.vault_dynamodb_arn
+  dynamodb_table          = module.dynamodb.dynamodb_table
+  key_name                = module.bastion.key_name
 }
 
 //bastion
 module "bastion" {
-  source = "github.com/rogmanster/terraform-aws-vault-ent-starter-bastion"
+  source = "github.com/rogmanster/terraform-aws-vault-ent-starter-dynamodb-bastion"
 
-  bastion_count             = 4 #~node for benchmark-vault
+  bastion_count             = 6 #~node for benchmark-vault
   telemetry_count           = 1 #~should only be 1
   instance_type             = "m5.large"
   vault_version             = "1.10.0"
