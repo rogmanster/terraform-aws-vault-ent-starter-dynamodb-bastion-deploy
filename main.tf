@@ -39,7 +39,8 @@ module "aws_vault_ent" {
   #lb_health_check_path    = "/v1/sys/health?standbyok=true&perfstandbyok=true"
   #lb_health_check_path    = "/v1/sys/health?standbyok=true" #~benchmark did not work - all nodes healthy and assumed read/write would be forwarded from stby to act?
   lb_health_check_path     = "/v1/sys/health?activecode=200" #~worked but not sure if correct - only active not is healthly
-  allowed_inbound_cidrs_lb  = ["0.0.0.0/0"]
+  allowed_inbound_cidrs_lb   = ["0.0.0.0/0"]
+  allowed_inbound_cidrs_ssh  = ["0.0.0.0/0"]
   block_device_mappings = [
     {
       device_name  = "/dev/sda1"
